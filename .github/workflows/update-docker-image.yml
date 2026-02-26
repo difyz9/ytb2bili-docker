@@ -1,0 +1,158 @@
+name: Update yt-dlp Docker Image
+
+on:
+  # 每天 UTC 时间 00:00 自动执行（北京时间 08:00）
+  schedule:
+    - cron: '0 0 * * *'
+  
+  # 手动触发
+  workflow_dispatch:
+  
+  # 当 Dockerfile.base 被修改时触发
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'Dockerfile.base'
+      - '.github/workflows/update-docker-image.yml'
+    # 当创建新的 tag 时触发（格式：v1.0.0, v2.1.0 等）
+    tags:
+      - 'v*.*.*'
+      - 'v*.*'
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+      
+      - name: Get current yt-dlp version
+        id: get_version
+        run: |
+          # 获取 yt-dlp 最新版本
+          YTDLP_VERSION=$(curl -s https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+          
+          # 验证版本号不为空
+          if [ -z "$YTDLP_VERSION" ]; then
+            echo "Error: Failed to fetch yt-dlp version"
+            exit 1
+          fi
+          
+          echo "ytdlp_version=${YTDLP_VERSION}" >> $GITHUB_OUTPUT
+          echo "Latest yt-dlp version: ${YTDLP_VERSION}"
+          
+          # 生成日期标签
+          DATE_TAG=$(date +%Y%m%d)
+          echo "date_tag=${DATE_TAG}" >> $GITHUB_OUTPUT
+          echo "Date tag: ${DATE_TAG}"
+          
+          # 检查是否是 tag 触发
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            GIT_TAG=${GITHUB_REF#refs/tags/}
+            echo "git_tag=${GIT_TAG}" >> $GITHUB_OUTPUT
+            echo "Git tag: ${GIT_TAG}"
+            echo "is_tag=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_tag=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Check if image needs update
+        id: check_update
+        run: |
+          # 如果是 tag 触发，总是构建
+          if [ "${{ steps.get_version.outputs.is_tag }}" == "true" ]; then
+            echo "Tag triggered build - forcing update"
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+          else
+            # 检查 Docker Hub 上是否已存在该版本
+            YTDLP_VERSION="${{ steps.get_version.outputs.ytdlp_version }}"
+            
+            # 尝试拉取带有版本标签的镜像
+            if docker pull difyz9/ytb2bili-base:${YTDLP_VERSION} 2>/dev/null; then
+              echo "Image with yt-dlp ${YTDLP_VERSION} already exists"
+              echo "needs_update=false" >> $GITHUB_OUTPUT
+            else
+              echo "Image needs update to yt-dlp ${YTDLP_VERSION}"
+              echo "needs_update=true" >> $GITHUB_OUTPUT
+            fi
+          fi
+      
+      - name: Prepare Docker tags
+        if: steps.check_update.outputs.needs_update == 'true'
+        id: prepare_tags
+        run: |
+          TAGS="difyz9/ytb2bili-base:latest"
+          TAGS="${TAGS},difyz9/ytb2bili-base:${{ steps.get_version.outputs.ytdlp_version }}"
+          TAGS="${TAGS},difyz9/ytb2bili-base:${{ steps.get_version.outputs.date_tag }}"
+          
+          # 如果是 tag 触发，添加 git tag 作为镜像标签
+          if [ "${{ steps.get_version.outputs.is_tag }}" == "true" ]; then
+            TAGS="${TAGS},difyz9/ytb2bili-base:${{ steps.get_version.outputs.git_tag }}"
+          fi
+          
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "Docker tags to be pushed:"
+          echo "${TAGS}" | tr ',' '\n'
+      
+      - name: Build and push Docker image
+        if: steps.check_update.outputs.needs_update == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.base
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.prepare_tags.outputs.tags }}
+          cache-from: type=registry,ref=difyz9/ytb2bili-base:buildcache
+          cache-to: type=registry,ref=difyz9/ytb2bili-base:buildcache,mode=max
+      
+      - name: Test the built image
+        if: steps.check_update.outputs.needs_update == 'true'
+        run: |
+          echo "Testing the built image..."
+          docker run --rm difyz9/ytb2bili-base:latest yt-dlp --version
+          docker run --rm difyz9/ytb2bili-base:latest ffmpeg -version
+      
+      - name: Create summary
+        if: steps.check_update.outputs.needs_update == 'true'
+        run: |
+          echo "## Docker Image Updated Successfully ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.get_version.outputs.is_tag }}" == "true" ]; then
+            echo "- **Trigger**: Git tag \`${{ steps.get_version.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Trigger**: Scheduled/Manual update" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "- **yt-dlp version**: ${{ steps.get_version.outputs.ytdlp_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Date tag**: ${{ steps.get_version.outputs.date_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Hub**: https://hub.docker.com/r/difyz9/ytb2bili-base" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Tags pushed:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`difyz9/ytb2bili-base:latest\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`difyz9/ytb2bili-base:${{ steps.get_version.outputs.ytdlp_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- \`difyz9/ytb2bili-base:${{ steps.get_version.outputs.date_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.get_version.outputs.is_tag }}" == "true" ]; then
+            echo "- \`difyz9/ytb2bili-base:${{ steps.get_version.outputs.git_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: No update needed
+        if: steps.check_update.outputs.needs_update == 'false'
+        run: |
+          echo "## No Update Needed ℹ️" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The Docker image is already up-to-date with yt-dlp ${{ steps.get_version.outputs.ytdlp_version }}" >> $GITHUB_STEP_SUMMARY
