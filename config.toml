@@ -1,94 +1,57 @@
-# Bilibili 视频上传后端 - 配置文件
 
-listen = ":5688"
-environment = "development"
-debug = true
-fileUpDir = "./media"
-data_path = "./data"
+
+# ============================================================================
+# 应用基础配置
+# ============================================================================
+
+[server]
+host = "0.0.0.0"
+port = 8096
+static_dir = "./media"
+static_path = "/static"
+
+# ============================================================================
+# 数据库配置（MySQL for Docker）
+# ============================================================================
+[database]
+type = "mysql"
+host = "mysql"                 # Docker Compose 服务名
+port = 3306
+user = "ytb2bili"              # 与 docker-compose.yml 一致
+password = "ytb2bili@123"
+dbname = "bili_up"             # 数据库名（注意是 dbname 不是 database）
+sslmode = ""                   # MySQL 不使用（仅 PostgreSQL 需要）
+timezone = "Asia/Shanghai"     # 时区配置
+auto_migrate = true
+table_prefix = ""
+
+# ============================================================================
+# 视频处理工作流配置
+# ============================================================================
+[workflow]
+download_dir = "./media"
 ytdlp_path = "/usr/local/bin/yt-dlp"
 ffmpeg_path = "/usr/bin/ffmpeg"
+llm_translation_enabled = false
+llm_translation_batch_size = 25
+llm_translation_max_workers = 3
+llm_translation_context_size = 2
+llm_translation_source_lang = "en"
+llm_translation_target_lang = "zh-Hans"
+tts_enabled = false
 
+# ============================================================================
+# Agent & LLM 配置（可选，不使用 LLM 可不配置）
+# ============================================================================
+[agent]
+name = "ytb2bili_agent"
 
-[database]
-  type = "mysql"
-  host = "mysql"        # Docker: mysql 服务名; 本地开发改为 localhost
-  port = 3306
-  username = "ytb2bili" # 与 docker-compose.yml 中 MYSQL_USER 保持一致
-  password = "ytb2bili@123"
-  database = "bili_up"
-  ssl_mode = ""
-  timezone = "Asia/Shanghai"
+[agent.llm]
+provider = "openai"
+api_key = ""  # 留空表示不使用 LLM
+model = "gpt-4"
 
-[auth]
-  jwt_secret = "your-jwt-secret-key"
-  jwt_expiration = 24
-  session_secret = "your-session-secret"
-
-
-[TenCosConfig]
-  Enabled = false
-  CosBucketURL = ""
-  CosSecretId = ""
-  CosSecretKey = ""
-  CosRegion = ""
-  CosBucket = ""
-  SubAppId = ""
-  CosUrL = ""
-
-[DeepSeekTransConfig]
-  enabled = true
-  api_key = "sk-deepseek_api_key"
-  models = ""
-  endpoint = "https://api.deepseek.com"
-  timeout = 60
-  max_tokens = 4000
-
-[GeminiConfig]
-  enabled = false                  # 是否启用Gemini服务
-  api_key = ""                     # Google AI API密钥（从 https://aistudio.google.com/app/apikey 获取）
-  model = "gemini-2.5-flash"       # 使用的模型（gemini-2.5-flash 快速, gemini-2.5-pro 强大）
-  timeout = 120                    # 超时时间（秒）
-  max_tokens = 8000                # 最大输出token数
-  use_for_metadata = false         # 是否使用Gemini生成元数据（优先于DeepSeek）
-  analyze_video = true             # 是否分析视频文件（true=多模态分析，false=仅文本）
-  video_sample_frames = 0          # 视频采样帧数（0=上传完整视频）
-
-[ProxyConfig]
-  use_proxy = false
-  proxy_host = "http://127.0.0.1:7890"
-
-[AnalyticsConfig]
-  enabled = false
-  server_url = "http://localhost:8080"
-  api_key = ""
-  product_id = "bili-up-api"
-  debug = false
-  encryption_key = ""
-
-[BilibiliConfig]
-  copyright = 2                # 1=自制, 2=转载
-  source = "YouTube"           # 转载来源
-  no_reprint = 1               # 0=允许转载, 1=禁止转载
-  use_original_title = true     # true=使用原视频标题, false=使用AI生成标题
-  use_original_desc = false     # true=使用原视频描述, false=使用AI生成描述
-  custom_title_template = ""    # 自定义标题模板（可选），支持变量: {original_title}, {ai_title}
-                                # 示例: "{original_title}【中文字幕】" 或 "【原神MMD】{ai_title}"
-  custom_desc_template = ""     # 自定义描述模板（可选），支持变量: {original_desc}, {ai_desc}
-  
-  # 新增配置项
-  tid = 122                    # 分区ID（122=日常，138=搞笑，详见B站分区列表）
-  dynamic = "发布了新视频！"      # 动态文本
-  open_elec = 0                # 是否开启充电面板 0=关闭, 1=开启
-  selection_reserve = 0        # 参与活动ID（0表示不参与，暂不被SDK支持）
-  up_selection_reply = 0       # 是否展示推荐评论 0=关闭, 1=开启（暂不被SDK支持）
-  up_close_reply = 0           # 是否关闭评论 0=开启评论, 1=关闭评论（暂不被SDK支持）
-  up_close_reward = 0          # 是否关闭打赏 0=开启, 1=关闭（暂不被SDK支持）
-
-  # 自定义描述模板示例：
-  # custom_desc_template = """
-  # 【视频内容】
-  # {ai_desc}
-  # 
-  # 【原视频描述】
-  # {original_desc}
-  # """
+[updater]
+enabled = true
+auto_update = false
+check_interval = 24

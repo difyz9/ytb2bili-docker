@@ -20,18 +20,18 @@ services:
       start_period: 30s
 
   ytb2bili:
-    image: difyz9/ytb2bili
-    platform: linux/arm64
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VERSION: v0.0.17
     container_name: ytb2bili-app
     restart: unless-stopped
     depends_on:
       mysql:
         condition: service_healthy
     ports:
-      - "5688:5688"
+      - "8096:8096"
     volumes:
       - ./config.toml:/app/config.toml:ro
       - app_data:/app/data

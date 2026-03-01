@@ -1,18 +1,28 @@
 FROM difyz9/ytb2bili-base
 
 LABEL maintainer="difyz9" \
-      image="difyz9/ytb2bili"
+      image="difyz9/ytb2bili" \
+      version="v0.0.17"
+
+# Docker 自动设置目标架构 (amd64 / arm64)
+ARG TARGETARCH
+ARG VERSION=v0.0.17
 
 WORKDIR /app
 
-# 复制 arm64 可执行文件和配置文件
-COPY ytb2bili-linux-arm64 ./ytb2bili
-COPY config.toml ./config.toml
-
-# 创建数据目录并赋予执行权限
-RUN mkdir -p ./data ./media \
+# 从 GitHub Releases 下载对应架构的压缩包并解压
+RUN ARCHIVE="ytb2bili-linux-${TARGETARCH}.tar.gz" \
+    && URL="https://github.com/difyz9/ytb2bili/releases/download/${VERSION}/${ARCHIVE}" \
+    && echo "Downloading ${URL}" \
+    && curl -fsSL "${URL}" -o "/tmp/${ARCHIVE}" \
+    && tar -xzf "/tmp/${ARCHIVE}" -C /tmp \
+    && mv "/tmp/ytb2bili-linux-${TARGETARCH}/ytb2bili-linux-${TARGETARCH}" ./ytb2bili \
+    && rm -rf "/tmp/${ARCHIVE}" "/tmp/ytb2bili-linux-${TARGETARCH}" \
     && chmod +x ./ytb2bili
 
-EXPOSE 5688
+# 创建数据目录
+RUN mkdir -p ./data ./media
+
+EXPOSE 8096
 
 CMD ["./ytb2bili"]
