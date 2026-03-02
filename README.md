@@ -165,23 +165,64 @@ curl -fsSL https://raw.githubusercontent.com/difyz9/ytb2bili-docker/main/docker-
 
 #### 第二步：修改 `config.toml`
 
-用任意编辑器打开 `config.toml`，根据需要修改以下关键项：
+用任意编辑器打开 `config.toml`，**数据库部分无需改动**，默认已与 docker-compose 保持一致。
 
-| 配置项 | 说明 | 是否必填 |
-|--------|------|---------|
-| `[database]` | 数据库连接（默认已与 docker-compose 一致，无需改动） | 必填 |
-| `[agent.llm] api_key` | DeepSeek / OpenAI 兼容 API Key（用于 AI 翻译） | 可选 |
+如需开启 AI 字幕翻译，按以下说明选择一个 LLM 服务配置：
 
-如需使用 AI 翻译，在 `config.toml` 中修改：
+##### 第一步：开启翻译开关
 
 ```toml
 [workflow]
-llm_translation_enabled = true   # 开启 LLM 翻译
+llm_translation_enabled     = true      # 必须设为 true
+llm_translation_source_lang = "en"      # 原始字幕语言
+llm_translation_target_lang = "zh-Hans" # 目标语言（简体中文）
+llm_translation_batch_size  = 25        # 每批翻译字幕条数
+llm_translation_max_workers = 3         # 并发协程数
+```
 
+##### 第二步：配置 LLM 服务（三选一）
+
+**方案 A — DeepSeek（推荐，价格低、中文效果好）**
+
+> 申请 Key：https://platform.deepseek.com
+
+```toml
+[agent.llm]
+provider = "deepseek"
+api_key  = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"  # 替换为你的 Key
+model    = "deepseek-chat"               # 可选: deepseek-reasoner（推理更强但较慢）
+```
+
+**方案 B — OpenAI**
+
+> 申请 Key：https://platform.openai.com
+
+```toml
 [agent.llm]
 provider = "openai"
-api_key  = "sk-xxxxxxxxxxxx"     # 填入你的 API Key
-model    = "deepseek-chat"       # 或 gpt-4 / gemini-pro 等
+api_key  = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"  # 替换为你的 Key
+model    = "gpt-4o-mini"                  # 推荐：速度快、价格低
+# model  = "gpt-4o"                       # 质量更高
+```
+
+**方案 C — 兼容 OpenAI 接口（OpenRouter / 本地 Ollama 等）**
+
+```toml
+# OpenRouter 示例
+[agent.llm]
+provider = "openai"
+api_key  = "sk-or-v1-xxxxxxxxxxxxxxxx"
+base_url = "https://openrouter.ai/api/v1"
+model    = "anthropic/claude-3.5-sonnet"
+```
+
+```toml
+# 本地 Ollama 示例
+[agent.llm]
+provider = "openai"
+api_key  = "ollama"
+base_url = "http://host.docker.internal:11434/v1"
+model    = "qwen2.5:14b"
 ```
 
 #### 第三步：启动服务
@@ -415,46 +456,76 @@ openssl rand -base64 32
 </details>
 
 <details>
-<summary><b>🌐 翻译服务配置</b></summary>
+<summary><b>🌐 LLM 翻译配置</b></summary>
 
-#### DeepSeek 翻译（推荐 🌟）
-```toml
-[DeepSeekTransConfig]
-  enabled = true
-  api_key = "sk-xxxxxxxxxxxx"               # API Key
-  models = "deepseek-chat"                  # 模型名称
-  endpoint = "https://api.deepseek.com"
-  timeout = 60                              # 超时时间（秒）
-  max_tokens = 4000                         # 最大输出 Token
-```
-- 💰 **成本低**：¥1/百万 Token
-- 🎯 **质量高**：上下文理解能力强
-- 🔗 [获取 API Key](https://platform.deepseek.com/)
+系统使用统一的 `[workflow]` + `[agent.llm]` 配置，支持任意兼容 OpenAI Chat Completions API 的服务。
 
-#### Google Gemini（多模态）
-```toml
-[GeminiConfig]
-  enabled = true
-  api_key = "AIzaSyxxxxxxxxxx"              # Google AI API Key
-  model = "gemini-2.0-flash-exp"            # 模型: flash-exp/pro
-  timeout = 120
-  max_tokens = 8000
-  use_for_metadata = true                   # 是否用于元数据生成
-  analyze_video = true                      # 是否分析视频画面
-  video_sample_frames = 10                  # 视频采样帧数
-```
-- 🎬 **多模态**：可直接分析视频内容
-- 🆓 **免费额度**：每天 1500 次请求
-- 🔗 [获取 API Key](https://aistudio.google.com/app/apikey)
+#### 第一步：开启翻译开关
 
-#### 百度翻译（备选）
 ```toml
-[BaiduTransConfig]
-  enabled = false
-  app_id = "your-baidu-app-id"
-  api_key = "your-baidu-api-key"
-  endpoint = "https://fanyi-api.baidu.com/api/trans/vip/translate"
+[workflow]
+llm_translation_enabled     = true      # true = 启用 LLM 翻译
+llm_translation_source_lang = "en"      # 字幕原始语言
+llm_translation_target_lang = "zh-Hans" # 目标语言（简体中文）
+llm_translation_batch_size  = 25        # 每批翻译条数（越大速度越快，但上下文越长）
+llm_translation_max_workers = 3         # 并发协程数
+llm_translation_context_size = 2        # 携带前后几条字幕作为上下文
 ```
+
+#### 方案 A — DeepSeek（推荐 🌟）
+
+```toml
+[agent.llm]
+provider = "deepseek"
+api_key  = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"   # https://platform.deepseek.com
+model    = "deepseek-chat"                 # 或 deepseek-reasoner（推理更强）
+```
+
+| 项目 | 说明 |
+|------|------|
+| 价格 | ¥1 / 百万 Token（deepseek-chat） |
+| 特点 | 中文理解强，字幕翻译效果优秀 |
+| Key 申请 | https://platform.deepseek.com |
+
+#### 方案 B — OpenAI
+
+```toml
+[agent.llm]
+provider = "openai"
+api_key  = "sk-xxxxxxxxxxxxxxxxxxxxxxxx"   # https://platform.openai.com
+model    = "gpt-4o-mini"                   # 推荐（速度快、价格低）
+# model  = "gpt-4o"                        # 质量更高
+```
+
+| 项目 | 说明 |
+|------|------|
+| 推荐模型 | `gpt-4o-mini`（¥0.11/百万输入 Token） |
+| Key 申请 | https://platform.openai.com |
+
+#### 方案 C — 兼容 OpenAI 接口（OpenRouter / Ollama 等）
+
+通过 `base_url` 指定任意兼容端点：
+
+```toml
+# OpenRouter 示例
+[agent.llm]
+provider = "openai"
+api_key  = "sk-or-v1-xxxxxxxxxxxxxxxx"
+base_url = "https://openrouter.ai/api/v1"
+model    = "anthropic/claude-3.5-sonnet"
+```
+
+```toml
+# 本地 Ollama 示例
+[agent.llm]
+provider = "openai"
+api_key  = "ollama"
+base_url = "http://host.docker.internal:11434/v1"
+model    = "qwen2.5:14b"
+```
+
+> **不使用 LLM**：将 `llm_translation_enabled = false`，上传时将直接使用原始英文字幕，不进行翻译。
+
 </details>
 
 <details>
