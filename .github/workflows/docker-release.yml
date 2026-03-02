@@ -1,0 +1,225 @@
+name: Docker Multi-Arch Build & Push (from Release)
+
+on:
+  # 定时检查：每天 UTC 02:00 自动运行
+  schedule:
+    - cron: '0 2 * * *'
+  # 手动触发，可指定版本
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '指定版本 tag（如 v0.0.17），留空则使用最新 release'
+        required: false
+        default: ''
+      force_rebuild:
+        description: '强制重新构建（即使版本未变更）'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  SOURCE_REPO: difyz9/ytb2bili
+  IMAGE_NAME: difyz9/ytb2bili
+
+jobs:
+  # ────────────────────────────────────────────
+  # Job 1：检查是否有新版本需要构建
+  # ────────────────────────────────────────────
+  check-release:
+    name: Check Latest Release Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      should_build: ${{ steps.compare.outputs.should_build }}
+    steps:
+      - name: Get target release version
+        id: get_version
+        run: |
+          if [[ -n "${{ github.event.inputs.version }}" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+            echo "使用指定版本: ${VERSION}"
+          else
+            VERSION=$(curl -fsSL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ env.SOURCE_REPO }}/releases/latest" \
+              | jq -r '.tag_name')
+            echo "最新 release 版本: ${VERSION}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Check if Docker image already exists for this version
+        id: compare
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          FORCE="${{ github.event.inputs.force_rebuild }}"
+          if [[ "${FORCE}" == "true" ]]; then
+            echo "强制重新构建，跳过版本检查"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 去掉 v 前缀，如 v0.0.17 → 0.0.17
+          TAG="${VERSION#v}"
+          HTTP_CODE=$(curl -sL -o /dev/null -w "%{http_code}" \
+            "https://hub.docker.com/v2/repositories/${{ env.IMAGE_NAME }}/tags/${TAG}")
+
+          if [[ "${HTTP_CODE}" == "200" ]]; then
+            echo "Docker Hub 上已存在 tag ${TAG}，跳过构建"
+            echo "should_build=false" >> $GITHUB_OUTPUT
+          else
+            echo "Docker Hub 上不存在 tag ${TAG}，需要构建"
+            echo "should_build=true" >> $GITHUB_OUTPUT
+          fi
+
+  # ────────────────────────────────────────────
+  # Job 2：下载 Release 包，构建并推送多架构镜像
+  # ────────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Multi-Arch Docker Image
+    needs: check-release
+    if: needs.check-release.outputs.should_build == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      # ──────────────────────────────────────────
+      # 1. 准备构建上下文目录
+      # ──────────────────────────────────────────
+      - name: Prepare build workspace
+        run: mkdir -p ./build-ctx
+
+      # ──────────────────────────────────────────
+      # 2. 下载 linux/amd64 release 包并解压
+      # ──────────────────────────────────────────
+      - name: Download linux/amd64 release tarball
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          URL="https://github.com/${{ env.SOURCE_REPO }}/releases/download/${VERSION}/ytb2bili-linux-amd64.tar.gz"
+          echo "下载: ${URL}"
+          curl -fsSL -o amd64.tar.gz "${URL}"
+          tar -xzf amd64.tar.gz
+          ls -lh ytb2bili-linux-amd64/
+          # 取出二进制、时区文件、默认配置
+          cp ytb2bili-linux-amd64/ytb2bili-linux-amd64 ./build-ctx/ytb2bili-linux-amd64
+          cp ytb2bili-linux-amd64/config.toml          ./build-ctx/config.toml
+          cp ytb2bili-linux-amd64/Shanghai.zone        ./build-ctx/Shanghai.zone
+
+      # ──────────────────────────────────────────
+      # 3. 下载 linux/arm64 release 包并解压
+      # ──────────────────────────────────────────
+      - name: Download linux/arm64 release tarball
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          URL="https://github.com/${{ env.SOURCE_REPO }}/releases/download/${VERSION}/ytb2bili-linux-arm64.tar.gz"
+          echo "下载: ${URL}"
+          curl -fsSL -o arm64.tar.gz "${URL}"
+          tar -xzf arm64.tar.gz
+          ls -lh ytb2bili-linux-arm64/
+          cp ytb2bili-linux-arm64/ytb2bili-linux-arm64 ./build-ctx/ytb2bili-linux-arm64
+
+      # ──────────────────────────────────────────
+      # 4. 写入 Dockerfile（ARG TARGETARCH 自动选择二进制）
+      # ──────────────────────────────────────────
+      - name: Write Dockerfile into build context
+        run: |
+          cat > ./build-ctx/Dockerfile <<'DOCKERFILE'
+          FROM difyz9/ytb2bili-base:latest
+
+          # BuildKit 自动注入 TARGETARCH（amd64 / arm64）
+          ARG TARGETARCH=amd64
+
+          LABEL maintainer="difyz9" \
+                image="difyz9/ytb2bili"
+
+          WORKDIR /app
+
+          # 注入 Asia/Shanghai 时区（无需 apt-get tzdata）
+          RUN mkdir -p /usr/share/zoneinfo/Asia
+          COPY Shanghai.zone /usr/share/zoneinfo/Asia/Shanghai
+          RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+              && echo "Asia/Shanghai" > /etc/timezone
+
+          # 根据目标架构复制对应二进制
+          COPY ytb2bili-linux-${TARGETARCH} ./ytb2bili
+          COPY config.toml ./config.toml
+
+          # 创建运行时目录、赋权
+          RUN mkdir -p ./data ./media ./backend \
+              && chmod +x ./ytb2bili \
+              && cp ./config.toml ./backend/config.toml
+
+          EXPOSE 8096
+
+          CMD ["./ytb2bili"]
+          DOCKERFILE
+
+          echo "Build context 文件列表:"
+          ls -lh ./build-ctx/
+
+      # ──────────────────────────────────────────
+      # 5. 配置 QEMU + Buildx
+      # ──────────────────────────────────────────
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ──────────────────────────────────────────
+      # 6. 登录 Docker Hub
+      # ──────────────────────────────────────────
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ──────────────────────────────────────────
+      # 7. 解析镜像 Tag
+      #    v0.0.17 → 0.0.17 + latest
+      # ──────────────────────────────────────────
+      - name: Resolve image tags
+        id: tags
+        env:
+          VERSION: ${{ needs.check-release.outputs.version }}
+        run: |
+          SEMVER="${VERSION#v}"
+          TAGS="${{ env.IMAGE_NAME }}:${SEMVER},${{ env.IMAGE_NAME }}:latest"
+          echo "tags=${TAGS}"       >> $GITHUB_OUTPUT
+          echo "semver=${SEMVER}"   >> $GITHUB_OUTPUT
+
+      # ──────────────────────────────────────────
+      # 8. 构建并推送多架构镜像
+      # ──────────────────────────────────────────
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./build-ctx
+          file: ./build-ctx/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=ytb2bili
+            org.opencontainers.image.version=${{ steps.tags.outputs.semver }}
+            org.opencontainers.image.source=https://github.com/${{ env.SOURCE_REPO }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ──────────────────────────────────────────
+      # 9. 输出摘要
+      # ──────────────────────────────────────────
+      - name: Print summary
+        run: |
+          echo "### Docker Image Published :rocket:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | ----- |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tags | \`${{ steps.tags.outputs.tags }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source version | \`${{ needs.check-release.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Platforms | \`linux/amd64, linux/arm64\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source repo | [\`${{ env.SOURCE_REPO }}\`](https://github.com/${{ env.SOURCE_REPO }}/releases/tag/${{ needs.check-release.outputs.version }}) |" >> $GITHUB_STEP_SUMMARY
