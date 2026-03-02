@@ -143,7 +143,100 @@ graph LR
 
 ## � 快速开始
 
-### 方式一：Docker Compose 部署 (推荐 ⭐)
+### 方式一：Docker Hub 镜像部署（推荐 ⭐ 无需编译）
+
+镜像已发布至 Docker Hub，支持 `linux/amd64` 和 `linux/arm64`（Apple Silicon / 树莓派）。
+
+```
+docker pull difyz9/ytb2bili:latest
+```
+
+#### 第一步：创建工作目录并下载配置文件
+
+```bash
+mkdir ytb2bili && cd ytb2bili
+
+# 下载默认配置文件
+curl -fsSL https://raw.githubusercontent.com/difyz9/ytb2bili-docker/main/config.toml -o config.toml
+
+# 下载 docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/difyz9/ytb2bili-docker/main/docker-compose.yml -o docker-compose.yml
+```
+
+#### 第二步：修改 `config.toml`
+
+用任意编辑器打开 `config.toml`，根据需要修改以下关键项：
+
+| 配置项 | 说明 | 是否必填 |
+|--------|------|---------|
+| `[database]` | 数据库连接（默认已与 docker-compose 一致，无需改动） | 必填 |
+| `[agent.llm] api_key` | DeepSeek / OpenAI 兼容 API Key（用于 AI 翻译） | 可选 |
+
+如需使用 AI 翻译，在 `config.toml` 中修改：
+
+```toml
+[workflow]
+llm_translation_enabled = true   # 开启 LLM 翻译
+
+[agent.llm]
+provider = "openai"
+api_key  = "sk-xxxxxxxxxxxx"     # 填入你的 API Key
+model    = "deepseek-chat"       # 或 gpt-4 / gemini-pro 等
+```
+
+#### 第三步：启动服务
+
+```bash
+docker compose up -d
+```
+
+> 首次启动会自动拉取镜像并等待 MySQL 就绪（约 30 秒），可用 `docker compose logs -f` 查看进度。
+
+启动成功后：
+
+| 服务 | 地址 |
+|------|------|
+| 🌐 Web 管理后台 | `http://localhost:8096` |
+| 🗄️ MySQL（调试用） | `localhost:3309` |
+
+#### 第四步：B 站账号扫码登录
+
+1. 打开 `http://localhost:8096`
+2. 进入 **设置 → B站账号** 页面
+3. 用 B站 App 扫描二维码完成授权
+4. Cookie 自动保存，无需再次登录
+
+#### 第五步：添加搬运任务
+
+1. 进入 **任务 → 新建任务**
+2. 粘贴 YouTube / TikTok 视频链接
+3. 点击 **创建**，系统自动开始处理：
+   - 📥 下载视频
+   - 🎤 生成字幕（Whisper）
+   - 🌐 翻译字幕（LLM）
+   - 📤 上传到 B 站
+
+---
+
+#### 常用管理命令
+
+```bash
+# 查看实时日志
+docker compose logs -f ytb2bili
+
+# 停止服务（保留数据）
+docker compose down
+
+# 升级到最新版本
+docker compose pull && docker compose up -d
+
+# 彻底清除（含数据库数据）
+docker compose down -v
+```
+
+---
+
+### 方式二：Docker Compose 从源码构建 (推荐 ⭐)
 
 **最快 5 分钟完成部署！**
 
@@ -161,8 +254,8 @@ cp config.toml.example config.toml
 
 **必须配置项**：
 - `[database]` - 数据库连接信息（Docker 自动创建）
-- `[DeepSeekTransConfig]` 或 `[GeminiConfig]` - 至少配置一个翻译 API
-- `yt_dlp_path` - yt-dlp 可执行文件路径（Docker 已预装）
+- `[agent.llm] api_key` - 至少配置一个翻译 API
+- `ytdlp_path` - yt-dlp 可执行文件路径（Docker 已预装）
 
 **可选配置项**：
 - `[TenCosConfig]` - 腾讯云 COS 加速上传（推荐大文件上传）
@@ -175,7 +268,7 @@ docker-compose up -d
 
 服务启动后：
 - 🌐 访问 `http://localhost:8096` 进入管理后台
-- 📊 数据库运行在 `localhost:3306`
+- 📊 数据库运行在 `localhost:3309`
 - 💾 数据持久化在 Docker 卷 `ytb2bili_data`
 
 #### 4. 查看日志
@@ -194,7 +287,7 @@ docker-compose down
 
 ---
 
-### 方式二：本地编译部署
+### 方式三：本地编译部署
 
 #### 前置依赖
 
