@@ -38,7 +38,10 @@ services:
 volumes:
   mysql_data:
     name: ytb2bili_mysql_data
+    external: true
   app_data:
     name: ytb2bili_app_data
+    external: true
   app_media:
     name: ytb2bili_media
+    external: true
