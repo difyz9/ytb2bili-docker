@@ -103,13 +103,15 @@ jobs:
         run: |
           URL="https://github.com/${{ env.SOURCE_REPO }}/releases/download/${VERSION}/ytb2bili-linux-amd64.tar.gz"
           echo "下载: ${URL}"
+          mkdir -p ytb2bili-linux-amd64
           curl -fsSL -o amd64.tar.gz "${URL}"
-          tar -xzf amd64.tar.gz
+          tar -xzf amd64.tar.gz -C ytb2bili-linux-amd64
           ls -lh ytb2bili-linux-amd64/
           # 取出二进制、时区文件、默认配置
           cp ytb2bili-linux-amd64/ytb2bili-linux-amd64 ./build-ctx/ytb2bili-linux-amd64
           cp ytb2bili-linux-amd64/config.toml          ./build-ctx/config.toml
-          cp ytb2bili-linux-amd64/Shanghai.zone        ./build-ctx/Shanghai.zone
+          # Shanghai.zone 可能不随包发布，忽略缺失
+          cp ytb2bili-linux-amd64/Shanghai.zone ./build-ctx/Shanghai.zone 2>/dev/null || true
 
       # ──────────────────────────────────────────
       # 3. 下载 linux/arm64 release 包并解压
@@ -120,8 +122,9 @@ jobs:
         run: |
           URL="https://github.com/${{ env.SOURCE_REPO }}/releases/download/${VERSION}/ytb2bili-linux-arm64.tar.gz"
           echo "下载: ${URL}"
+          mkdir -p ytb2bili-linux-arm64
           curl -fsSL -o arm64.tar.gz "${URL}"
-          tar -xzf arm64.tar.gz
+          tar -xzf arm64.tar.gz -C ytb2bili-linux-arm64
           ls -lh ytb2bili-linux-arm64/
           cp ytb2bili-linux-arm64/ytb2bili-linux-arm64 ./build-ctx/ytb2bili-linux-arm64
 
@@ -141,13 +144,14 @@ jobs:
 
           WORKDIR /app
 
-          # 注入 Asia/Shanghai 时区（无需 apt-get tzdata）
-          RUN mkdir -p /usr/share/zoneinfo/Asia
-          COPY Shanghai.zone /usr/share/zoneinfo/Asia/Shanghai
-          RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+          # 注入 Asia/Shanghai 时区
+          RUN apt-get update -qq \
+              && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tzdata \
+              && rm -rf /var/lib/apt/lists/* \
+              && ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
               && echo "Asia/Shanghai" > /etc/timezone
 
-          # 根据目标架构复制对应二进制
+          # 根据目标架构复制对应二进制（可选拷贝 Shanghai.zone）
           COPY ytb2bili-linux-${TARGETARCH} ./ytb2bili
           COPY config.toml ./config.toml
 
