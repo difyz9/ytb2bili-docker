@@ -21,7 +21,7 @@ RUN ARCHIVE="ytb2bili-linux-${TARGETARCH}.tar.gz" \
     && chmod +x ./ytb2bili
 
 # 创建数据目录
-RUN mkdir -p ./data ./media
+RUN mkdir -p ./logs ./downloads
 
 EXPOSE 8096
 

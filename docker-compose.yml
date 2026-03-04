@@ -9,7 +9,7 @@ services:
       MYSQL_USER: ytb2bili
       MYSQL_PASSWORD: ytb2bili@123
     volumes:
-      - mysql_data:/var/lib/mysql
+      - ./mysql_data:/var/lib/mysql
     ports:
       - "3309:3306"
     healthcheck:
@@ -30,18 +30,13 @@ services:
       - "8096:8096"
     volumes:
       - ./config.toml:/app/config.toml:ro
-      - app_data:/app/data
-      - app_media:/app/media
+      - ./logs:/app/logs
+      - ./downloads:/app/downloads
     environment:
       - TZ=Asia/Shanghai
 
-volumes:
-  mysql_data:
-    name: ytb2bili_mysql_data
-    external: true
-  app_data:
-    name: ytb2bili_app_data
-    external: true
-  app_media:
-    name: ytb2bili_media
-    external: true
+
+
+
+# docker compose down
+# docker volume rm ytb2bili_mysql_data
