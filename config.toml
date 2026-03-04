@@ -83,7 +83,7 @@ name = "ytb2bili_agent"  # Agent 名称
 
 # DeepSeek 示例
 provider = "deepseek"
-api_key = "sk"
+api_key = ""
 base_url = "https://api.deepseek.com/v1"
 model = "deepseek-chat"
 
