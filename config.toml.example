@@ -124,15 +124,3 @@ enabled = false  # 是否启用腾讯云 COS 存储
 # cos_bucket = "your-bucket-name"
 # sub_app_id = "your_app_id"
 
-
-# ============================================================================
-# Cloudflare 邮箱认证配置（使用 Cloudflare Workers KV 存储用户数据）
-# npx wrangler kv namespace create ytb2bili-auth
-# ============================================================================
-[cloudflare_auth]
-enabled              = true
-api_token            = "H1YiHCdb7QbFeFXNiIbBEiNv7q6gWZSBh56mWU_J"
-account_id           = "3588c2ee7bff61458d8190e99cf9e790"
-namespace_id         = "a0fe6458b34145039c903f1ac9f8280a"   # ← 替换为 Cloudflare KV Namespace ID（从控制台 Workers & Pages → KV 获取）
-jwt_secret           = "your-very-secure-secret-key-here"
-jwt_expiration_hours = 24
