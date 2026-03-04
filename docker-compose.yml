@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: your_password
-      MYSQL_DATABASE: bili_up01
+      MYSQL_DATABASE: bili_up
       MYSQL_USER: ytb2bili
       MYSQL_PASSWORD: ytb2bili@123
     volumes:

@@ -37,11 +37,10 @@ table_prefix = ""
 download_dir = "./downloads"  # 视频下载目录（必需，应与 server.static_dir 保持一致）
 
 # yt-dlp 可执行文件路径（可选，默认从 PATH 查找）
-ytdlp_path = "/Users/apple/opt/yt-dlp/yt-dlp"
+ytdlp_path = "/usr/local/bin/yt-dlp"
 
 # ffmpeg 可执行文件路径（可选，默认从 PATH 查找）
-ffmpeg_path = "/usr/local/bin/ffmpeg"
-
+ffmpeg_path = "/usr/bin/ffmpeg"
 # Cookies 文件路径（可选，用于下载受限视频）
 # cookies_file = "/path/to/cookies.txt"
 
