@@ -157,8 +157,7 @@ jobs:
 
           # 创建运行时目录、赋权
           RUN mkdir -p ./logs ./downloads  \
-              && chmod +x ./ytb2bili \
-              && cp ./config.toml ./app/config.toml
+              && chmod +x ./ytb2bili
 
           EXPOSE 8096
 

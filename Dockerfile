@@ -2,11 +2,11 @@ FROM difyz9/ytb2bili-base
 
 LABEL maintainer="difyz9" \
       image="difyz9/ytb2bili" \
-      version="v0.0.17"
+      version="v0.0.19"
 
 # Docker 自动设置目标架构 (amd64 / arm64)
 ARG TARGETARCH
-ARG VERSION=v0.0.17
+ARG VERSION=v0.0.19
 
 WORKDIR /app
 
